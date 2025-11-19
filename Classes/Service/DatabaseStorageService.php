@@ -20,6 +20,7 @@ use Neos\ContentRepository\Core\Projection\ContentGraph\Filter\FindClosestNodeFi
 use Neos\ContentRepository\Core\Projection\ContentGraph\Filter\FindDescendantNodesFilter;
 use Neos\ContentRepository\Core\Projection\ContentGraph\Filter\NodeType\NodeTypeCriteria;
 use Neos\ContentRepository\Core\Projection\ContentGraph\Filter\PropertyValue\Criteria\PropertyValueEquals;
+use Neos\ContentRepository\Core\Projection\ContentGraph\VisibilityConstraints;
 use Neos\ContentRepository\Core\SharedModel\ContentRepository\ContentRepositoryId;
 use Neos\ContentRepository\Core\SharedModel\Node\PropertyName;
 use Neos\ContentRepository\Core\SharedModel\Workspace\WorkspaceName;
@@ -247,7 +248,7 @@ class DatabaseStorageService
         $contentGraph =  $contentRepository->getContentGraph(WorkspaceName::forLive());
         $sitesRootNodeNode = $contentGraph->findRootNodeAggregateByType(NodeTypeName::fromString('Neos.Neos:Sites'));
         $contentSubgraph = $contentGraph->getSubgraph(
-            DimensionSpacePoint::createWithoutDimensions(), NeosVisibilityConstraints::excludeRemoved()
+            DimensionSpacePoint::createWithoutDimensions(), VisibilityConstraints::createEmpty()
         );
         $finisherNodes = $contentSubgraph->findDescendantNodes(
             $sitesRootNodeNode->nodeAggregateId,
@@ -270,7 +271,7 @@ class DatabaseStorageService
 
         // Find the NodeBasedForm owning the Finisher
         $formNode = $contentSubgraph->findClosestNode(
-            $sitesRootNodeNode->nodeAggregateId,
+            $finisherNodes->first()->aggregateId,
             FindClosestNodeFilter::create(NodeTypeCriteria::fromFilterString('Neos.Form.Builder:NodeBasedForm'))
         );
 
