@@ -62,13 +62,13 @@ class DatabaseStorage
     /**
      * Set the identifier
      *
-     * @param string $identifier The identifier for the entry.
+     * @param string $storageIdentifier The identifier for the entry.
      *
      * @return DatabaseStorage
      */
-    public function setStorageidentifier(string $identifier)
+    public function setStorageidentifier(string $storageIdentifier)
     {
-        $this->storageidentifier = $identifier;
+        $this->storageidentifier = $storageIdentifier;
         return $this;
     }
 

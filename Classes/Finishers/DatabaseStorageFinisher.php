@@ -63,25 +63,25 @@ class DatabaseStorageFinisher extends AbstractFinisher
         $formRuntime = $this->finisherContext->getFormRuntime();
         $formValues = $formRuntime->getFormState()->getFormValues();
 
-        $identifier = $this->parseOption('identifier');
-        if ($identifier) {
-            $this->databaseStorageService = new DatabaseStorageService($identifier);
+        $storageIdentifier = $this->parseOption('storageIdentifier');
+        if ($storageIdentifier) {
+            $this->databaseStorageService = new DatabaseStorageService($storageIdentifier);
         } else {
-            $identifier = '__undefined__';
+            $storageIdentifier = '__undefined__';
         }
 
         foreach ($formValues as $formElementIdentifier => $formValue) {
             if ($formValue instanceof ResourceBasedInterface) {
                 $formValues[$formElementIdentifier] = $formValue->getResource();
             }
-            if ($identifier && $this->databaseStorageService->formElementIdentifierMustBeIgnoredInFinisher($formElementIdentifier)) {
+            if ($storageIdentifier && $this->databaseStorageService->formElementIdentifierMustBeIgnoredInFinisher($formElementIdentifier)) {
                 unset($formValues[$formElementIdentifier]);
             }
         }
 
         $dbStorage = new DatabaseStorage();
         $dbStorage
-            ->setStorageidentifier($identifier)
+            ->setStorageidentifier($storageIdentifier)
             ->setProperties($formValues)
             ->setDateTime(new \DateTime());
 

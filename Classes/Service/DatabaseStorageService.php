@@ -13,8 +13,17 @@
 namespace Wegmeister\DatabaseStorage\Service;
 
 use Doctrine\ORM\EntityNotFoundException;
-use Neos\ContentRepository\Domain\Model\NodeInterface;
-use Neos\ContentRepository\Domain\Service\ContextFactory;
+use Neos\ContentRepository\Core\DimensionSpace\DimensionSpacePoint;
+use Neos\ContentRepository\Core\Feature\Security\Exception\AccessDenied;
+use Neos\ContentRepository\Core\NodeType\NodeTypeName;
+use Neos\ContentRepository\Core\Projection\ContentGraph\Filter\FindClosestNodeFilter;
+use Neos\ContentRepository\Core\Projection\ContentGraph\Filter\FindDescendantNodesFilter;
+use Neos\ContentRepository\Core\Projection\ContentGraph\Filter\NodeType\NodeTypeCriteria;
+use Neos\ContentRepository\Core\Projection\ContentGraph\Filter\PropertyValue\Criteria\PropertyValueEquals;
+use Neos\ContentRepository\Core\SharedModel\ContentRepository\ContentRepositoryId;
+use Neos\ContentRepository\Core\SharedModel\Node\PropertyName;
+use Neos\ContentRepository\Core\SharedModel\Workspace\WorkspaceName;
+use Neos\ContentRepositoryRegistry\ContentRepositoryRegistry;
 use Neos\Eel\FlowQuery\FlowQuery;
 use Neos\Flow\Annotations as Flow;
 use Neos\Flow\Persistence\Exception\IllegalObjectTypeException;
@@ -22,7 +31,7 @@ use Neos\Flow\Persistence\Exception\InvalidQueryException;
 use Neos\Flow\Persistence\QueryResultInterface;
 use Neos\Flow\ResourceManagement\PersistentResource;
 use Neos\Flow\ResourceManagement\ResourceManager;
-use Neos\Neos\Domain\Service\SiteService;
+use Neos\Neos\Domain\SubtreeTagging\NeosVisibilityConstraints;
 use Wegmeister\DatabaseStorage\Domain\Model\DatabaseStorage;
 use Wegmeister\DatabaseStorage\Domain\Repository\DatabaseStorageRepository;
 
@@ -82,11 +91,8 @@ class DatabaseStorageService
      */
     protected $preparedDimensions;
 
-    /**
-     * @Flow\Inject
-     * @var ContextFactory
-     */
-    protected $contextFactory;
+    #[Flow\Inject]
+    protected ContentRepositoryRegistry $contentRepositoryRegistry;
 
     /**
      * @Flow\Inject
@@ -223,8 +229,8 @@ class DatabaseStorageService
      * are looked up to provide the best possible label and value matching for the export.
      *
      * @return array|null
-     * @throws \Neos\ContentRepository\Exception\NodeException
      * @throws \Neos\Eel\Exception
+     * @throws AccessDenied
      */
     protected function getFormElementsNodeData(?array $dimensions = []): ?array
     {
@@ -237,35 +243,21 @@ class DatabaseStorageService
         if (empty($dimensions)) {
             $dimensions = reset($this->preparedDimensions);
         }
-
-        $contextProperties = [
-            'workspaceName' => 'live',
-            'invisibleContentShown' => true,
-            'removedContentShown' => true,
-            'inaccessibleContentShown' => false,
-        ];
-
-        if (!empty($dimensions)) {
-            $contextProperties['dimensions'] = [];
-            $contextProperties['targetDimensions'] = [];
-
-            foreach ($dimensions as $dimension => $dimensionPreset) {
-                $contextProperties['dimensions'][$dimension] = $dimensionPreset['dimensions'];
-                $contextProperties['targetDimensions'][$dimension] = $dimensionPreset['targetDimensions'];
-            }
-        }
-
-        $context = $this->contextFactory->create(
-            $contextProperties
+        $contentRepository = $this->contentRepositoryRegistry->get(ContentRepositoryId::fromString('default'));
+        $contentGraph =  $contentRepository->getContentGraph(WorkspaceName::forLive());
+        $sitesRootNodeNode = $contentGraph->findRootNodeAggregateByType(NodeTypeName::fromString('Neos.Neos:Sites'));
+        $contentSubgraph = $contentGraph->getSubgraph(
+            DimensionSpacePoint::createWithoutDimensions(), NeosVisibilityConstraints::excludeRemoved()
+        );
+        $finisherNodes = $contentSubgraph->findDescendantNodes(
+            $sitesRootNodeNode->nodeAggregateId,
+            FindDescendantNodesFilter::create(
+                nodeTypes: NodeTypeCriteria::fromFilterString('Wegmeister.DatabaseStorage:DatabaseStorageFinisher'),
+                propertyValue: PropertyValueEquals::create(PropertyName::fromString('identifier'), $this->formStorageIdentifier, true)
+            )
         );
 
-        // Find the finisher belonging to the formStorageIdentifier
-        $q = new FlowQuery([$context->getNode(SiteService::SITES_ROOT_PATH)]);
-        $finisherNodes = $q->find(
-            "[instanceof Wegmeister.DatabaseStorage:DatabaseStorageFinisher][identifier='" . $this->formStorageIdentifier . "']"
-        )->get();
-
-        if (count($finisherNodes) !== 1) {
+        if ($finisherNodes->count() !== 1) {
             // None or more than one Finisher with the same identifier --> could be a Fusion or YAML form or ambiguous --> return
             $nextDimensions = next($this->preparedDimensions);
 
@@ -277,9 +269,12 @@ class DatabaseStorageService
         }
 
         // Find the NodeBasedForm owning the Finisher
-        $q = new FlowQuery([$finisherNodes[0]]);
-        $formNode = $q->parents('[instanceof Neos.Form.Builder:NodeBasedForm]')->get(0);
-        if (!$formNode instanceof NodeInterface) {
+        $formNode = $contentSubgraph->findClosestNode(
+            $sitesRootNodeNode->nodeAggregateId,
+            FindClosestNodeFilter::create(NodeTypeCriteria::fromFilterString('Neos.Form.Builder:NodeBasedForm'))
+        );
+
+        if (!$formNode instanceof \Neos\ContentRepository\Core\Projection\ContentGraph\Node) {
             // No NodeBasedForm found, return
             $nextDimensions = next($this->preparedDimensions);
 
@@ -307,10 +302,10 @@ class DatabaseStorageService
 
         $mapping = [];
 
-        /** @var NodeInterface $formElement */
+        /** @var \Neos\ContentRepository\Core\Projection\ContentGraph\Node $formElement */
         foreach ($formElements as $formElement) {
             // UUID of the FormElement node
-            $nodeIdentifier = (string)$formElement->getNodeAggregateIdentifier();
+            $nodeIdentifier = $formElement->aggregateId->value;
             // Given identifier of the FormElement
             $speakingIdentifier = $formElement->getProperty('identifier');
             // Label of the FormElement
@@ -319,7 +314,7 @@ class DatabaseStorageService
             $displayLabel = $label ?: $speakingIdentifier ?: $nodeIdentifier;
 
             $mapping[] = [
-                'nodeTypeName' => $formElement->getNodeType()->getName(),
+                'nodeTypeName' => $formElement->nodeTypeName->value,
                 'nodeIdentifier' => $nodeIdentifier,
                 'speakingIdentifier' => $speakingIdentifier,
                 'label' => $label,

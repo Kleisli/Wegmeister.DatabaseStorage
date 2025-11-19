@@ -34,11 +34,11 @@ class DatabaseStorageAction extends AbstractAction
      */
     public function perform(): ?ActionResponse
     {
-        $identifier = $this->options['identifier'];
+        $storageIdentifier = $this->options['storageIdentifier'];
         $formValues = $this->options['formValues'];
 
-        if (!$identifier) {
-            $identifier = '__undefined__';
+        if (!$storageIdentifier) {
+            $storageIdentifier = '__undefined__';
         }
 
         foreach ($formValues as $formElementIdentifier => $formValue) {
@@ -49,7 +49,7 @@ class DatabaseStorageAction extends AbstractAction
 
         $dbStorage = new DatabaseStorage();
         $dbStorage
-            ->setStorageidentifier($identifier)
+            ->setStorageidentifier($storageIdentifier)
             ->setProperties($formValues)
             ->setDateTime(new \DateTime());
 
