@@ -13,6 +13,7 @@
 namespace Wegmeister\DatabaseStorage\Service;
 
 use Doctrine\ORM\EntityNotFoundException;
+use Neos\ContentRepository\Core\ContentRepository;
 use Neos\ContentRepository\Core\DimensionSpace\DimensionSpacePoint;
 use Neos\ContentRepository\Core\Feature\Security\Exception\AccessDenied;
 use Neos\ContentRepository\Core\NodeType\NodeTypeName;
@@ -25,14 +26,12 @@ use Neos\ContentRepository\Core\SharedModel\ContentRepository\ContentRepositoryI
 use Neos\ContentRepository\Core\SharedModel\Node\PropertyName;
 use Neos\ContentRepository\Core\SharedModel\Workspace\WorkspaceName;
 use Neos\ContentRepositoryRegistry\ContentRepositoryRegistry;
-use Neos\Eel\FlowQuery\FlowQuery;
 use Neos\Flow\Annotations as Flow;
 use Neos\Flow\Persistence\Exception\IllegalObjectTypeException;
 use Neos\Flow\Persistence\Exception\InvalidQueryException;
 use Neos\Flow\Persistence\QueryResultInterface;
 use Neos\Flow\ResourceManagement\PersistentResource;
 use Neos\Flow\ResourceManagement\ResourceManager;
-use Neos\Neos\Domain\SubtreeTagging\NeosVisibilityConstraints;
 use Wegmeister\DatabaseStorage\Domain\Model\DatabaseStorage;
 use Wegmeister\DatabaseStorage\Domain\Repository\DatabaseStorageRepository;
 
@@ -80,12 +79,6 @@ class DatabaseStorageService
      * @Flow\InjectConfiguration(path="datetimeFormat", package="Wegmeister.DatabaseStorage")
      */
     protected $datetimeFormat;
-
-    /**
-     * @var array
-     * @Flow\InjectConfiguration(path="contentDimensions", package="Neos.ContentRepository")
-     */
-    protected $contentDimensions;
 
     /**
      * @var array
@@ -154,35 +147,26 @@ class DatabaseStorageService
 
     /**
      * Prepare configured dimensions for easier iteration
-     * @return void
      */
-    protected function prepareDimensions(): void
+    protected function prepareDimensions(ContentRepository $contentRepository): void
     {
         if ($this->preparedDimensions !== null) {
             // Dimensions are already prepared
             return;
         }
 
-        if (empty($this->contentDimensions)) {
+        $contentDimensions = $contentRepository->getContentDimensionSource()->getContentDimensionsOrderedByPriority();
+        if (empty($contentDimensions)) {
             // No dimensions configured
             $this->preparedDimensions = [];
             return;
         }
 
         $preparedDimensions = [];
-        foreach ($this->contentDimensions as $identifier => $dimension) {
-            // Move default preset to first position
-            $dimensionPresets = array_merge(
-                [$dimension['default'] => $dimension['presets'][$dimension['default']]],
-                $dimension['presets'],
-            );
-
-            $preparedDimensions[$identifier] = [];
-            foreach ($dimensionPresets as $targetDimension => $preset) {
-                $preparedDimensions[$identifier][] = [
-                    'dimensions' => $preset['values'],
-                    'targetDimensions' => $targetDimension,
-                ];
+        foreach ($contentDimensions as $contentDimension) {
+            $preparedDimensions[$contentDimension->id->value] = [];
+            foreach ($contentDimension->values as $contentDimensionValue) {
+                $preparedDimensions[$contentDimension->id->value][] = $contentDimensionValue->value;
             }
         }
 
@@ -210,7 +194,7 @@ class DatabaseStorageService
         unset($inputArray[$dimensionKey]);
 
         foreach ($dimensionValues as $dimensionValue) {
-            // Add the current dimansion and its value to the combinations
+            // Add the current dimension and its value to the combinations
             $combinations[$dimensionKey] = $dimensionValue;
 
             if (empty($inputArray)) {
@@ -240,21 +224,22 @@ class DatabaseStorageService
             return $this->formElementsNodeData;
         }
 
-        $this->prepareDimensions();
+        $contentRepository = $this->contentRepositoryRegistry->get(ContentRepositoryId::fromString('default'));
+        $this->prepareDimensions($contentRepository);
         if (empty($dimensions)) {
             $dimensions = reset($this->preparedDimensions);
         }
-        $contentRepository = $this->contentRepositoryRegistry->get(ContentRepositoryId::fromString('default'));
+
         $contentGraph =  $contentRepository->getContentGraph(WorkspaceName::forLive());
         $sitesRootNodeNode = $contentGraph->findRootNodeAggregateByType(NodeTypeName::fromString('Neos.Neos:Sites'));
         $contentSubgraph = $contentGraph->getSubgraph(
-            DimensionSpacePoint::createWithoutDimensions(), VisibilityConstraints::createEmpty()
+            DimensionSpacePoint::fromArray($dimensions), VisibilityConstraints::createEmpty()
         );
         $finisherNodes = $contentSubgraph->findDescendantNodes(
             $sitesRootNodeNode->nodeAggregateId,
             FindDescendantNodesFilter::create(
                 nodeTypes: NodeTypeCriteria::fromFilterString('Wegmeister.DatabaseStorage:DatabaseStorageFinisher'),
-                propertyValue: PropertyValueEquals::create(PropertyName::fromString('identifier'), $this->formStorageIdentifier, true)
+                propertyValue: PropertyValueEquals::create(PropertyName::fromString('storageIdentifier'), $this->formStorageIdentifier, true)
             )
         );
 
@@ -282,22 +267,24 @@ class DatabaseStorageService
             if ($nextDimensions !== false) {
                 return $this->getFormElementsNodeData($nextDimensions);
             }
-
             return null;
         }
 
         // Find all FormElements belonging to the Form
-        $q = new FlowQuery([$formNode]);
-        $formElements = $q->find('[instanceof Neos.Form.Builder:FormElement]')->get();
+        $formElements = $contentSubgraph->findDescendantNodes(
+            $formNode->aggregateId,
+            FindDescendantNodesFilter::create(
+                nodeTypes: NodeTypeCriteria::fromFilterString('Neos.Form.Builder:FormElement')
+            )
+        );
 
-        if (empty($formElements)) {
+        if ($formElements->isEmpty()) {
             // No FormElements found, return
             $nextDimensions = next($this->preparedDimensions);
 
             if ($nextDimensions !== false) {
                 return $this->getFormElementsNodeData($nextDimensions);
             }
-
             return null;
         }
 
