@@ -35,64 +35,35 @@ use Neos\Flow\ResourceManagement\ResourceManager;
 use Wegmeister\DatabaseStorage\Domain\Model\DatabaseStorage;
 use Wegmeister\DatabaseStorage\Domain\Repository\DatabaseStorageRepository;
 
-/**
- * @Flow\Scope("singleton")
- */
+#[Flow\Scope("singleton")]
 class DatabaseStorageService
 {
-    /**
-     * @var DatabaseStorageRepository
-     * @Flow\Inject
-     */
-    protected $databaseStorageRepository;
-
-    /**
-     * @var array
-     */
-    protected $formElementsNodeData;
-
-    /**
-     * @var string
-     */
-    protected $formStorageIdentifier;
-
-    /**
-     * @var array
-     * @Flow\InjectConfiguration(path="nodeTypesIgnoredInFinisher", package="Wegmeister.DatabaseStorage")
-     */
-    protected $nodeTypesIgnoredInFinisher;
-
-    /**
-     * @var string
-     * @Flow\InjectConfiguration(path="listPrefix", package="Wegmeister.DatabaseStorage")
-     */
-    protected $listPrefix;
-
-    /**
-     * @var array
-     * @Flow\InjectConfiguration(path="nodeTypesIgnoredInExport", package="Wegmeister.DatabaseStorage")
-     */
-    protected $nodeTypesIgnoredInExport;
-
-    /**
-     * @var string
-     * @Flow\InjectConfiguration(path="datetimeFormat", package="Wegmeister.DatabaseStorage")
-     */
-    protected $datetimeFormat;
-
-    /**
-     * @var array
-     */
-    protected $preparedDimensions;
-
     #[Flow\Inject]
     protected ContentRepositoryRegistry $contentRepositoryRegistry;
 
-    /**
-     * @Flow\Inject
-     * @var ResourceManager
-     */
-    protected $resourceManager;
+    #[Flow\Inject]
+    protected ResourceManager $resourceManager;
+
+    #[Flow\Inject]
+    protected DatabaseStorageRepository $databaseStorageRepository;
+
+    #[Flow\InjectConfiguration(path: "nodeTypesIgnoredInFinisher", package: "Wegmeister.DatabaseStorage")]
+    protected array $nodeTypesIgnoredInFinisher;
+
+    #[Flow\InjectConfiguration(path: "listPrefix", package: "Wegmeister.DatabaseStorage")]
+    protected string $listPrefix;
+
+    #[Flow\InjectConfiguration(path: "nodeTypesIgnoredInExport", package: "Wegmeister.DatabaseStorage")]
+    protected array $nodeTypesIgnoredInExport;
+
+    #[Flow\InjectConfiguration(path: "datetimeFormat", package: "Wegmeister.DatabaseStorage")]
+    protected string $datetimeFormat;
+
+    protected array $formElementsNodeData = [];
+
+    protected string $formStorageIdentifier;
+
+    protected ?array $preparedDimensions = null;
 
     public function __construct(string $formStorageIdentifier = '')
     {
@@ -120,9 +91,6 @@ class DatabaseStorageService
      * - The Node identifier
      * - The speaking identifier of the FormElement
      * - The label of the FormElement
-     *
-     * @param string $identifier
-     * @return array|null
      */
     public function getFormElementDataByIdentifier(string $identifier): ?array
     {
@@ -179,8 +147,6 @@ class DatabaseStorageService
      *
      * @param array $inputArray The multidimensional array of the dimensions
      * @param array $keys The keys of the dimensions
-     *
-     * @return array
      */
     protected function createDimensionCombinations(array $inputArray, array $combinations = []): array
     {
@@ -213,7 +179,6 @@ class DatabaseStorageService
      * If the Node-based form is still available, node data such as the "speaking" identifier, the label
      * are looked up to provide the best possible label and value matching for the export.
      *
-     * @return array|null
      * @throws \Neos\Eel\Exception
      * @throws AccessDenied
      */
@@ -316,9 +281,6 @@ class DatabaseStorageService
 
     /**
      * Get field labels of all entries to allow exporting all fields added/removed/changed over time
-     *
-     * @param QueryResultInterface $entries
-     * @return array
      */
     public function getFormElementLabels(QueryResultInterface $entries): array
     {
@@ -356,10 +318,6 @@ class DatabaseStorageService
     /**
      * We check the given entry if there is a value for the given display label
      * The check is performed against the key, the nodeIdentifier and the speakingIdentifier
-     *
-     * @param DatabaseStorage $entry
-     * @param string $formElementLabel
-     * @return string
      */
     public function getValueFromEntryProperty(DatabaseStorage $entry, string $formElementLabel): string
     {
@@ -395,8 +353,6 @@ class DatabaseStorageService
      *
      * @param mixed $value The database column value.
      * @param int $indent The level of indentation (for array values).
-     *
-     * @return string
      */
     protected function getStringValue($value, int $indent = 0): string
     {
@@ -452,9 +408,6 @@ class DatabaseStorageService
 
     /**
      * Checks if there are entries for given storage identifier.
-     *
-     * @param string $storageIdentifier
-     * @return int
      */
     public function getAmountOfEntriesByStorageIdentifier(string $storageIdentifier): int
     {
@@ -463,11 +416,6 @@ class DatabaseStorageService
 
     /**
      * Deletes entries of a storage by its identifier and an optional date interval.
-     *
-     * @param string $storageIdentifier Storage identifier
-     * @param \DateInterval $dateInterval Date interval
-     * @param bool $removeFiles
-     * @return int
      */
     public function cleanupByStorageIdentifierAndDateInterval(string $storageIdentifier, \DateInterval $dateInterval, bool $removeFiles = false): int
     {
@@ -479,10 +427,7 @@ class DatabaseStorageService
     }
 
     /**
-     * Get a list of all storage identifiers.
-     *
-     * @param array $excludedStorageIdentifiers
-     * @return array
+     * Get a list of all storage identifiers
      */
     public function getListOfStorageIdentifiers(array $excludedStorageIdentifiers = []): array
     {

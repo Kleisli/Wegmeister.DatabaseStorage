@@ -19,7 +19,6 @@ namespace Wegmeister\DatabaseStorage\Finishers;
 use Neos\Flow\Annotations as Flow;
 use Neos\Flow\Persistence\PersistenceManagerInterface;
 use Neos\Form\Core\Model\AbstractFinisher;
-use Neos\Form\Exception\FinisherException;
 use Neos\Media\Domain\Model\ResourceBasedInterface;
 
 use Wegmeister\DatabaseStorage\Domain\Model\DatabaseStorage;
@@ -31,34 +30,21 @@ use Wegmeister\DatabaseStorage\Service\DatabaseStorageService;
  */
 class DatabaseStorageFinisher extends AbstractFinisher
 {
-    /**
-     * Instance of the database storage repository.
-     *
-     * @Flow\Inject
-     * @var DatabaseStorageRepository
-     */
-    protected $databaseStorageRepository;
+    #[Flow\Inject]
+    protected DatabaseStorageRepository $databaseStorageRepository;
 
-    /**
-     * @var DatabaseStorageService
-     */
-    protected $databaseStorageService;
+    #[Flow\Inject]
+    protected PersistenceManagerInterface $persistenceManager;
 
-    /**
-     * @Flow\Inject
-     * @var PersistenceManagerInterface
-     */
-    protected $persistenceManager;
+    protected DatabaseStorageService $databaseStorageService;
 
     /**
      * Executes this finisher
      *
      * @see AbstractFinisher::execute()
-     *
-     * @return void
-     * @throws FinisherException
+     * @throws \Neos\Flow\Persistence\Exception\IllegalObjectTypeException
      */
-    protected function executeInternal()
+    protected function executeInternal(): void
     {
         $formRuntime = $this->finisherContext->getFormRuntime();
         $formValues = $formRuntime->getFormState()->getFormValues();
