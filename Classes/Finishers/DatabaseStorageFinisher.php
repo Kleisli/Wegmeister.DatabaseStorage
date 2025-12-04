@@ -36,6 +36,7 @@ class DatabaseStorageFinisher extends AbstractFinisher
     #[Flow\Inject]
     protected PersistenceManagerInterface $persistenceManager;
 
+    #[Flow\Inject]
     protected DatabaseStorageService $databaseStorageService;
 
     /**
